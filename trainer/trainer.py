@@ -15,9 +15,9 @@ from trainer.lr_schedulers import WarmUpWrapper  # do not remove
 from torch.optim.lr_scheduler import *  # For loading optimizer specified in config
 
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
-from commons.utils import flatten_dict, tensorboard_gradient_magnitude, move_to_device, list_detach, concat_if_list, log
+from commons.utils import flatten_dict, move_to_device, list_detach, concat_if_list, log #tensorboard_gradient_magnitude, move_to_device, list_detach, concat_if_list, log
 
 
 class Trainer():
@@ -40,7 +40,7 @@ class Trainer():
         self.initialize_scheduler()
         if args.checkpoint:
             checkpoint = torch.load(args.checkpoint, map_location=self.device)
-            self.writer = SummaryWriter(os.path.dirname(args.checkpoint))
+            # self.writer = SummaryWriter(os.path.dirname(args.checkpoint))
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optim.load_state_dict(checkpoint['optimizer_state_dict'])
             if self.lr_scheduler != None and checkpoint['scheduler_state_dict'] != None:
@@ -52,7 +52,7 @@ class Trainer():
             self.start_epoch = 1
             self.optim_steps = 0
             self.best_val_score = -np.inf if self.main_metric_goal == 'max' else np.inf  # running score to decide whether or not a new model should be saved
-            self.writer = SummaryWriter(run_dir)
+            # self.writer = SummaryWriter(run_dir)
             shutil.copyfile(self.args.config, os.path.join(self.writer.log_dir, os.path.basename(self.args.config)))
         #for i, param_group in enumerate(self.optim.param_groups):
         #    param_group['lr'] = 0.0003
@@ -182,7 +182,8 @@ class Trainer():
 
     def after_optim_step(self):
         if self.optim_steps % self.args.log_iterations == 0:
-            tensorboard_gradient_magnitude(self.optim, self.writer, self.optim_steps)
+            pass
+            # tensorboard_gradient_magnitude(self.optim, self.writer, self.optim_steps)
         if self.lr_scheduler != None and (self.scheduler_step_per_batch or (isinstance(self.lr_scheduler,
                                                                                        WarmUpWrapper) and self.lr_scheduler.total_warmup_steps > self.lr_scheduler._step)):  # step per batch if that is what we want to do or if we are using a warmup schedule and are still in the warmup period
             self.step_schedulers()
