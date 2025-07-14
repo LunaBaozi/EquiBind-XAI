@@ -134,3 +134,6 @@ runs2
 /runs/*
 !/runs/rigid_redocking
 !/runs/flexible_self_docking
+
+# results
+*.sdf

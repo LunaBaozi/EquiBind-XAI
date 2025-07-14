@@ -1,6 +1,0 @@
-REMARK  0 active torsions:
-REMARK  status: ('A' for Active; 'I' for Inactive)
-ROOT
-ATOM      1  H1  UNK     1     -32.770 -26.108  28.236  1.00  0.00     0.000 HD
-ENDROOT
-TORSDOF 0
