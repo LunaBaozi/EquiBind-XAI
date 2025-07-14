@@ -1,0 +1,88 @@
+
+     RDKit          2D
+
+ 40 42  0  0  0  0  0  0  0  0999 V2000
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan O   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan N   0  0  0  0  0  2  0  0  0  0  0  0
+      -nan      -nan      -nan O   0  0  0  0  0  1  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan C   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+      -nan      -nan      -nan H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  2  3  1  0
+  3  4  1  0
+  4  5  1  0
+  3  6  1  0
+  6  7  1  0
+  7  8  1  0
+  8  9  1  0
+  9 10  1  0
+ 10 11  1  0
+ 11 12  1  0
+ 11 13  1  0
+ 10 14  1  0
+ 14 15  1  0
+ 15 16  1  0
+ 16 17  1  0
+ 17  7  1  0
+ 17 14  1  0
+ 17 15  1  0
+  1 18  1  0
+  1 19  1  0
+  1 20  1  0
+  2 21  1  0
+  2 22  1  0
+  3 23  1  0
+  4 24  1  0
+  4 25  1  0
+  5 26  1  0
+  5 27  1  0
+  5 28  1  0
+  6 29  1  0
+  6 30  1  0
+  7 31  1  0
+  8 32  1  0
+  8 33  1  0
+ 10 34  1  0
+ 11 35  1  0
+ 12 36  1  0
+ 14 37  1  0
+ 15 38  1  0
+ 16 39  1  0
+ 16 40  1  0
+M  RAD  2  12   2  13   2
+M  END

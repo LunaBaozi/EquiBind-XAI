@@ -1,0 +1,23 @@
+name: equibind
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.7
+  - torchvision
+  - torchaudio
+  - pytorch
+  - pyg
+  - dgl
+  - rdkit
+  - openbabel
+  - biopython
+  - biopandas
+  - pot
+  - dgllife
+  - joblib
+  - pyaml
+  - icecream
+  - matplotlib
+  - tensorboard
+  - psutil

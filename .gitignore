@@ -116,15 +116,6 @@ venv.bak/
 
 #################### Project specific
 
-# this ignores everything in data except for the file
-!/data
-/data/*
-!/data/PDBBind_deepBSP_filtered/pdbbind_ids_without_overlap_with_casf.data
-!/data/timesplit_test
-!/data/timesplit_no_lig_overlap_train
-!/data/timesplit_no_lig_overlap_val
-!/data/timesplit_no_lig_or_rec_overlap_train
-!/data/timesplit_no_lig_or_rec_overlap_val
 
 
 cache

@@ -324,6 +324,9 @@ def inference_from_files(args):
     all_ligs_keypts = []
     all_recs_keypts = []
     all_names = []
+
+    broken_complexes = {}
+
     dp = args.dataset_params
     use_rdkit_coords = args.use_rdkit_coords if args.use_rdkit_coords != None else args.dataset_params[
         'use_rdkit_coords']
@@ -415,11 +418,23 @@ def inference_from_files(args):
                 rotable_bonds = get_torsions([lig_input])
                 new_dihedrals = np.zeros(len(rotable_bonds))
                 for idx, r in enumerate(rotable_bonds):
-                    new_dihedrals[idx] = get_dihedral_vonMises(lig_input, lig_input.GetConformer(), r, Z_pt_cloud)
+                    try:
+                        new_dihedrals[idx] = get_dihedral_vonMises(lig_input, lig_input.GetConformer(), r, Z_pt_cloud)
+                    except:
+                        broken_complexes[f'{name}'] = 'atoms i and j have identical 3D coordinates'
+                        print('atoms i and j have identical 3D coordinates')
+                    # new_dihedrals[idx] = get_dihedral_vonMises(lig_input, lig_input.GetConformer(), r, Z_pt_cloud)
                 optimized_mol = apply_changes(lig_input, new_dihedrals, rotable_bonds)
 
                 coords_pred_optimized = optimized_mol.GetConformer().GetPositions()
-                R, t = rigid_transform_Kabsch_3D(coords_pred_optimized.T, coords_pred.T)
+
+                try:
+                    R, t = rigid_transform_Kabsch_3D(coords_pred_optimized.T, coords_pred.T)
+                except:
+                    broken_complexes[f'{name}'] = 'numpy.linalg.LinAlgError: SVD did not converge'
+                    print('numpy.linalg.LinAlgError: SVD did not converge')
+
+                # R, t = rigid_transform_Kabsch_3D(coords_pred_optimized.T, coords_pred.T)
                 coords_pred_optimized = (R @ (coords_pred_optimized).T).T + t.squeeze()
                 all_ligs_coords_corrected.append(coords_pred_optimized)
 
