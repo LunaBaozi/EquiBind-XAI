@@ -137,3 +137,5 @@ runs2
 
 # results
 *.sdf
+*.pdb 
+*.txt 
