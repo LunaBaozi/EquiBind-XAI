@@ -139,3 +139,7 @@ runs2
 *.sdf
 *.pdb 
 *.txt 
+*.csv
+*.pdbqt
+*.png
+
