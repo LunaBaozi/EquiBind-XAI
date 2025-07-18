@@ -6,6 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from load_config_paths import PipelinePaths
 
 from rdkit import Chem
+import shutil
 
 def merge_sdf_files(input_files, output_file):
     writer = Chem.SDWriter(str(output_file))
@@ -49,8 +50,6 @@ if __name__ == '__main__':
     output_sdf = ligands_dir / 'multiligand.sdf'
     print("Output sdf: ", output_sdf)
 
-    # output_sdf = paths.output_path(experiment, epoch, num_gen, known_binding_site, pdbid, 'multiligand.sdf')
-
     # Get all SDF files in the ligands directory
     sdf_files = list(ligands_dir.glob("*.sdf"))
     
@@ -64,3 +63,24 @@ if __name__ == '__main__':
         merge_sdf_files(sdf_files, output_sdf)
 
     print(f"Merged SDF file created: {output_sdf}")
+
+    # Copy multiligand.sdf to results directory using the new function
+    results_sdf_path = paths.equibind_results_path(experiment, epoch, num_gen, known_binding_site, pdbid, 'multiligand.sdf')
+
+    try:
+        shutil.copy2(output_sdf, results_sdf_path)
+        print(f"Copied {output_sdf} to {results_sdf_path}")
+    except Exception as e:
+        print(f"Error copying file: {e}")
+        # If copy fails, try creating the file directly in the results directory
+        print("Attempting to create file directly in results directory...")
+        try:
+            if sdf_files:
+                merge_sdf_files(sdf_files, results_sdf_path)
+            else:
+                with open(results_sdf_path, 'w') as f:
+                    f.write("")
+            print(f"Successfully created file directly: {results_sdf_path}")
+        except Exception as e2:
+            print(f"Failed to create file directly: {e2}")
+            raise

@@ -13,7 +13,9 @@ import time
 from pathlib import Path
 import tempfile
 import re
+import numpy as np
 from rdkit import Chem
+from rdkit.Chem import Descriptors
 
 def log(level, message):
     """Simple logging function"""
@@ -45,6 +47,63 @@ def read_success_file(success_file):
         log("ERROR", f"Failed to read success file: {e}")
         return []
 
+def is_valid_molecule(mol):
+    """Check if a molecule has valid coordinates and structure"""
+    if mol is None:
+        return False, "NULL molecule"
+    
+    try:
+        # Check if molecule has atoms
+        if mol.GetNumAtoms() == 0:
+            return False, "No atoms"
+        
+        # Check for conformer
+        if mol.GetNumConformers() == 0:
+            return False, "No conformer"
+        
+        conf = mol.GetConformer()
+        
+        # Check for NaN coordinates
+        for i in range(mol.GetNumAtoms()):
+            pos = conf.GetAtomPosition(i)
+            if np.isnan(pos.x) or np.isnan(pos.y) or np.isnan(pos.z):
+                return False, "NaN coordinates"
+        
+        # Check for zero coordinates (might indicate bad structure)
+        all_zero = True
+        for i in range(mol.GetNumAtoms()):
+            pos = conf.GetAtomPosition(i)
+            if abs(pos.x) > 0.001 or abs(pos.y) > 0.001 or abs(pos.z) > 0.001:
+                all_zero = False
+                break
+        
+        if all_zero:
+            return False, "All coordinates are zero"
+        
+        # Check molecular weight (should be reasonable)
+        mw = Descriptors.MolWt(mol)
+        if mw < 50 or mw > 2000:
+            return False, f"Unreasonable molecular weight: {mw:.1f}"
+        
+        # Check for reasonable coordinate range
+        min_coord = float('inf')
+        max_coord = float('-inf')
+        
+        for i in range(mol.GetNumAtoms()):
+            pos = conf.GetAtomPosition(i)
+            for coord in [pos.x, pos.y, pos.z]:
+                min_coord = min(min_coord, coord)
+                max_coord = max(max_coord, coord)
+        
+        coord_range = max_coord - min_coord
+        if coord_range > 1000:  # Very spread out coordinates
+            return False, f"Coordinates too spread out: {coord_range:.1f}"
+        
+        return True, "Valid"
+        
+    except Exception as e:
+        return False, f"Error checking molecule: {e}"
+
 def split_multiligand_sdf(sdf_file, output_dir, success_ids=None):
     """Split a multi-ligand SDF file into individual ligand files"""
     
@@ -52,27 +111,45 @@ def split_multiligand_sdf(sdf_file, output_dir, success_ids=None):
         # Read the multi-ligand SDF file
         suppl = Chem.SDMolSupplier(sdf_file, removeHs=False)
         ligand_files = []
+        total_processed = 0
+        valid_structures = 0
         
         for i, mol in enumerate(suppl):
-            if mol is None:
-                log("WARN", f"Could not read molecule at index {i}")
-                continue
-                
+            total_processed += 1
+            
             # If success_ids is provided, only process successful ligands
             if success_ids is not None and i not in success_ids:
                 continue
             
-            # Create individual SDF file for this ligand
-            ligand_file = os.path.join(output_dir, f"ligand_{i}.sdf")
-            writer = Chem.SDWriter(ligand_file)
-            writer.write(mol)
-            writer.close()
+            # Validate molecule structure
+            is_valid, reason = is_valid_molecule(mol)
             
-            ligand_files.append((i, ligand_file))
-            if DEBUG_MODE:
-                log("DEBUG", f"Extracted ligand {i} to {ligand_file}")
+            if not is_valid:
+                log("WARN", f"Skipping ligand {i}: {reason}")
+                continue
+                
+            valid_structures += 1
+            
+            # Create individual PDB file for this ligand (not SDF)
+            ligand_file = os.path.join(output_dir, f"ligand_{i}.pdb")
+            
+            # Convert SDF to PDB using RDKit
+            try:
+                Chem.MolToPDBFile(mol, ligand_file)
+                ligand_files.append((i, ligand_file))
+                if DEBUG_MODE:
+                    log("DEBUG", f"Extracted valid ligand {i} to {ligand_file}")
+            except Exception as e:
+                log("WARN", f"Failed to convert molecule {i} to PDB: {e}")
+                continue
         
-        log("INFO", f"Split multi-ligand SDF into {len(ligand_files)} individual files")
+        log("INFO", f"Processed {total_processed} total structures")
+        log("INFO", f"Found {valid_structures} valid structures")
+        log("INFO", f"Created {len(ligand_files)} individual PDB files")
+        
+        if len(ligand_files) == 0:
+            log("ERROR", "No valid ligand structures found!")
+        
         return ligand_files
         
     except Exception as e:
@@ -95,21 +172,32 @@ def run_delta_linf9(protein_file, ligand_file, timeout=300):
         original_dir = os.getcwd()
         os.chdir(delta_linf9_dir)
         
+        # Use the current Python executable (should be from the correct conda environment)
+        import sys
+        python_executable = sys.executable
+        
         # Run the script
-        cmd = ["python", script_path, protein_file, ligand_file]
+        cmd = [python_executable, script_path, protein_file, ligand_file]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         
         # Change back to original directory
         os.chdir(original_dir)
         
         if result.returncode == 0:
+            # Debug: show raw output
+            if DEBUG_MODE:
+                log("DEBUG", f"Delta LinF9 raw output: {result.stdout}")
+            
             # Parse XGB score from output
             xgb_match = re.search(r'XGB \(in pK\) :\s*([0-9.-]+)', result.stdout)
             if xgb_match:
                 xgb_score = float(xgb_match.group(1))
+                if DEBUG_MODE:
+                    log("DEBUG", f"Parsed XGB score: {xgb_score}")
                 return xgb_score, result.stdout
             else:
                 log("WARN", "Could not parse XGB score from output")
+                log("WARN", f"Raw output was: {result.stdout}")
                 return None, result.stdout
         else:
             log("ERROR", f"Delta LinF9 failed: {result.stderr}")
