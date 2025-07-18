@@ -49,10 +49,18 @@ def create_visualizations(df, output_dir):
     
     if len(valid_df) == 0:
         print("No valid scores for visualization")
+        # Create empty plot file
+        plt.figure(figsize=(8, 6))
+        plt.text(0.5, 0.5, 'No valid XGB scores to plot', ha='center', va='center', fontsize=14)
+        plt.title('Delta LinF9 XGB Score Analysis - No Data')
+        plot_file = os.path.join(output_dir, 'xgb_analysis.png')
+        plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Empty plot saved to: {plot_file}")
         return
     
-    # Set up the plotting style
-    plt.style.use('seaborn-v0_8')
+    # Set up the plotting style - use a simpler style
+    plt.style.use('default')
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
     fig.suptitle('Delta LinF9 XGB Score Analysis', fontsize=16, fontweight='bold')
     
@@ -105,13 +113,20 @@ def create_visualizations(df, output_dir):
 def export_top_ligands(df, output_dir, top_n=10):
     """Export the top N ligands to a separate file"""
     valid_df = df.dropna(subset=['xgb_score_numeric'])
-    top_ligands = valid_df.nlargest(top_n, 'xgb_score_numeric')
     
     output_file = os.path.join(output_dir, f'top_{top_n}_ligands.csv')
-    top_ligands.to_csv(output_file, index=False)
     
-    print(f"Top {top_n} ligands exported to: {output_file}")
-    return top_ligands
+    if len(valid_df) > 0:
+        top_ligands = valid_df.nlargest(top_n, 'xgb_score_numeric')
+        top_ligands.to_csv(output_file, index=False)
+        print(f"Top {top_n} ligands exported to: {output_file}")
+        return top_ligands
+    else:
+        # Create empty file with headers
+        empty_df = pd.DataFrame(columns=['ligand_id', 'xgb_score', 'processing_time', 'status', 'ligand_file'])
+        empty_df.to_csv(output_file, index=False)
+        print(f"No valid ligands found. Empty file created: {output_file}")
+        return empty_df
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze Delta LinF9 XGB scoring results')
@@ -155,20 +170,30 @@ def main():
     print(f"\nExporting top {args.top} ligands...")
     top_ligands = export_top_ligands(df, args.output, args.top)
     
-    print(f"\nTOP {args.top} LIGANDS:")
-    print("-" * 60)
-    for idx, row in top_ligands.iterrows():
-        print(f"{row['ligand_id']:3} | {row['xgb_score_numeric']:8.3f} | {row['ligand_file']}")
+    if len(top_ligands) > 0:
+        print(f"\nTOP {args.top} LIGANDS:")
+        print("-" * 60)
+        for idx, row in top_ligands.iterrows():
+            print(f"{row['ligand_id']:3} | {row['xgb_score_numeric']:8.3f} | {row.get('ligand_file', 'N/A')}")
+    else:
+        print("No valid ligands found for ranking.")
     
-    # Generate plots
-    if args.plot:
-        print(f"\nGenerating visualizations...")
-        try:
-            create_visualizations(df, args.output)
-        except ImportError:
-            print("Warning: matplotlib/seaborn not available. Skipping visualizations.")
-        except Exception as e:
-            print(f"Error generating visualizations: {e}")
+    # Generate plots (always create the PNG file)
+    print(f"\nGenerating visualizations...")
+    try:
+        create_visualizations(df, args.output)
+    except ImportError:
+        print("Warning: matplotlib/seaborn not available. Creating empty plot file.")
+        # Create empty plot file
+        plot_file = os.path.join(args.output, 'xgb_analysis.png')
+        with open(plot_file, 'w') as f:
+            f.write("# Empty plot file - matplotlib not available\n")
+    except Exception as e:
+        print(f"Error generating visualizations: {e}")
+        # Create empty plot file
+        plot_file = os.path.join(args.output, 'xgb_analysis.png')
+        with open(plot_file, 'w') as f:
+            f.write("# Empty plot file - error occurred\n")
     
     print(f"\nAnalysis complete. Output files saved to: {args.output}")
 

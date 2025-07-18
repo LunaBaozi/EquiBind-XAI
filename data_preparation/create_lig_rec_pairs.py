@@ -64,23 +64,3 @@ if __name__ == '__main__':
         merge_sdf_files(sdf_files, output_sdf)
 
     print(f"Merged SDF file created: {output_sdf}")
-
-    # if epoch != 0:
-    #     # Process generated molecules from GraphBP
-    #     sdf_folder = paths.graphbp_sdf_path(epoch, num_gen, known_binding_site, pdbid)
-    #     print(f"Loading molecules from: {sdf_folder}")
-
-    #     mols, smiles, filenames, fps = load_mols_from_sdf_folder(sdf_folder)
-    #     lipinski = evaluate_lipinski_rules(mols, smiles, filenames)
-    #     lipinski.to_csv(output_csv, index=False)
-
-    # else:
-    #     # Process known Aurora kinase inhibitors
-    #     aurora_data_file = paths.aurora_data_path(aurora)
-    #     print(f"Loading Aurora kinase data from: {aurora_data_file}")
-        
-    #     mols, smiles, filenames, fps = read_aurora_kinase_interactions(aurora_data_file)
-    #     lipinski = evaluate_lipinski_rules(mols, smiles, filenames)
-    #     lipinski.to_csv(output_csv, index=False)
-
-    # print(f'Lipinski\'s Ro5 results saved to {output_csv}')
