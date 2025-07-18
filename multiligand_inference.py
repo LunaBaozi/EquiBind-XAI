@@ -5,6 +5,7 @@ import sys
 from copy import deepcopy
 
 import os
+import numpy as np
 
 from rdkit import Chem
 from rdkit.Geometry import Point3D
@@ -183,11 +184,18 @@ def run_corrections(lig, lig_coord, ligs_coords_pred_untuned):
     optimized_mol = apply_changes(lig_input, new_dihedrals, rotable_bonds)
     optimized_conf = optimized_mol.GetConformer()
     coords_pred_optimized = optimized_conf.GetPositions()
-    R, t = rigid_transform_Kabsch_3D(coords_pred_optimized.T, coords_pred.T)
-    coords_pred_optimized = (R @ (coords_pred_optimized).T).T + t.squeeze()
-    for i in range(optimized_mol.GetNumAtoms()):
-        x, y, z = coords_pred_optimized[i]
-        optimized_conf.SetAtomPosition(i, Point3D(float(x), float(y), float(z)))
+    
+    try:
+        R, t = rigid_transform_Kabsch_3D(coords_pred_optimized.T, coords_pred.T)
+        coords_pred_optimized = (R @ (coords_pred_optimized).T).T + t.squeeze()
+        for i in range(optimized_mol.GetNumAtoms()):
+            x, y, z = coords_pred_optimized[i]
+            optimized_conf.SetAtomPosition(i, Point3D(float(x), float(y), float(z)))
+    except np.linalg.LinAlgError:
+        # If SVD fails, skip the rigid transformation and use the optimized coordinates as-is
+        print("Warning: SVD failed in rigid transformation, using optimized coordinates without alignment")
+        pass
+    
     return optimized_mol
 
 def write_while_inferring(dataloader, model, args):
@@ -221,7 +229,25 @@ def write_while_inferring(dataloader, model, args):
                 out_ligs, out_lig_coords, predictions, successes, failures = run_batch(model, ligs, lig_coords,
                                                                                        lig_graphs, rec_graphs,
                                                                                        geometry_graphs, true_indices)
-                opt_mols = [run_corrections(lig, lig_coord, prediction) for lig, lig_coord, prediction in zip(out_ligs, out_lig_coords, predictions)]
+                
+                # Apply corrections with error handling for SVD convergence issues
+                opt_mols = []
+                correction_failures = []
+                for i, (lig, lig_coord, prediction) in enumerate(zip(out_ligs, out_lig_coords, predictions)):
+                    try:
+                        opt_mol = run_corrections(lig, lig_coord, prediction)
+                        opt_mols.append(opt_mol)
+                    except np.linalg.LinAlgError as e:
+                        print(f"Warning: SVD did not converge for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
+                        # Use the original molecule without corrections
+                        opt_mols.append(lig)
+                        correction_failures.append(f"molecule_{i}_svd_failed")
+                    except Exception as e:
+                        print(f"Warning: Error in corrections for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
+                        # Use the original molecule without corrections
+                        opt_mols.append(lig)
+                        correction_failures.append(f"molecule_{i}_correction_failed")
+                
                 for mol, success in zip(opt_mols, successes):
                     writer.write(mol)
                     success_file.write(f"{success[0]} {success[1]}")
