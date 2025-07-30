@@ -88,44 +88,53 @@ def copy_top_15_sdf_files(top_15_df, source_sdf_path, dest_dir):
     copied_files = 0
     copied_filenames = set()  # Track which filenames we've already copied
     
-    for _, row in top_15_df.iterrows():
-        filename = row['filename']
+    # Read all molecules from output.sdf once
+    source_file = Path(source_sdf_path).parent / 'output.sdf'
+    
+    if not os.path.exists(source_file):
+        print(f"Error: Source SDF file not found: {source_file}")
+        return 0
+    
+    try:
+        # Load all molecules with their names
+        supplier = Chem.SDMolSupplier(str(source_file))
+        mol_dict = {}
         
-        # Skip if we've already copied this filename
-        if filename in copied_filenames:
-            continue
+        for mol in supplier:
+            if mol is not None and mol.HasProp('_Name'):
+                mol_name = mol.GetProp('_Name')
+                mol_dict[mol_name] = mol
         
-        # Extract ligand index from filename (e.g., "0" from "0.sdf")
-        ligand_index = int(filename.replace('.sdf', ''))
+        print(f"Loaded {len(mol_dict)} molecules from {source_file}")
         
-        # Try to find the source SDF file
-        # First try the output.sdf file and extract individual molecules
-        source_file = Path(source_sdf_path).parent / 'output.sdf'
-        
-        if os.path.exists(source_file):
-            try:
-                # Read all molecules from output.sdf
-                supplier = Chem.SDMolSupplier(str(source_file))
-                mols = [mol for mol in supplier if mol is not None]
-                
-                if ligand_index < len(mols):
-                    mol = mols[ligand_index]
-                    dest_file = os.path.join(dest_dir, filename)
-                    
-                    # Write individual molecule to SDF file
-                    with Chem.SDWriter(dest_file) as writer:
-                        writer.write(mol)
-                    
-                    copied_files += 1
-                    copied_filenames.add(filename)
-                    print(f"Copied ligand {ligand_index} ({filename}) to {dest_file}")
-                else:
-                    print(f"Warning: Ligand index {ligand_index} not found in output.sdf")
+        # Copy molecules based on top 15 list
+        for _, row in top_15_df.iterrows():
+            filename = row['filename']
             
-            except Exception as e:
-                print(f"Error copying ligand {filename}: {e}")
-        else:
-            print(f"Warning: Source SDF file not found: {source_file}")
+            # Skip if we've already copied this filename
+            if filename in copied_filenames:
+                continue
+            
+            # Use filename directly as it matches the _Name property in the SDF
+            mol_name = filename
+            
+            if mol_name in mol_dict:
+                mol = mol_dict[mol_name]
+                dest_file = os.path.join(dest_dir, filename)
+                
+                # Write individual molecule to SDF file
+                with Chem.SDWriter(dest_file) as writer:
+                    writer.write(mol)
+                
+                copied_files += 1
+                copied_filenames.add(filename)
+                print(f"Copied molecule '{mol_name}' to {dest_file}")
+            else:
+                print(f"Warning: Molecule '{mol_name}' not found in output.sdf")
+        
+    except Exception as e:
+        print(f"Error processing {source_file}: {e}")
+        return 0
     
     print(f"Successfully copied {copied_files} SDF files to {dest_dir}")
     return copied_files
@@ -184,16 +193,54 @@ if __name__ == '__main__':
         print("No merged results to save.")
         exit(1)
     
-    # Step 5: Copy SDF files to Vina-box directory
-    # Create vina-box destination directory
-    vina_dest_dir = f"/vol/data/drug-design-pipeline/external/vina-box/docking/{pdbid}/experiment_{experiment}_{epoch}_{num_gen}_{known_binding_site}_{pdbid}"
+    # Step 4.5: Copy the CSV file to Vina-box directory
+    vina_base_dir = os.path.join(paths.project_root, "external", "vina-box", pdbid, f"experiment_{experiment}_{epoch}_{num_gen}_{known_binding_site}_{pdbid}")
+    vina_ligands_dir = os.path.join(vina_base_dir, "ligands")
+    os.makedirs(vina_ligands_dir, exist_ok=True)
     
+    # Copy the CSV file to the base experiment directory (not ligands subdirectory)
+    vina_csv_dest = os.path.join(vina_base_dir, 'top_15_confidence_with_synth.csv')
+    shutil.copy2(output_csv, vina_csv_dest)
+    print(f"Copied CSV file to Vina directory: {vina_csv_dest}")
+
+    # Step 4.6: Copy the PDB file to the Vina-box base directory for the protein
+    vina_protein_dir = os.path.join(paths.project_root, "external", "vina-box", pdbid)
+    os.makedirs(vina_protein_dir, exist_ok=True)
+
+    # Find the PDB file dynamically based on current experiment
+    pdb_source = paths.equibind_data_path(experiment, epoch, num_gen, known_binding_site, pdbid)
+    pdb_source = os.path.join(pdb_source, "ligands", f"{pdbid}_A_rec_reduce_noflip.pdb")
+    pdb_dest = os.path.join(vina_protein_dir, f"{pdbid}_A_rec_reduce_noflip.pdb")
+
+    try:
+        if os.path.exists(pdb_source):
+            shutil.copy2(pdb_source, pdb_dest)
+            print(f"Copied PDB file to Vina directory: {pdb_dest}")
+        else:
+            print(f"Warning: PDB source file not found: {pdb_source}")
+            # Fallback: try to find it in any experiment directory
+            search_pattern = os.path.join(paths.project_root, f"external/equibind/data/{pdbid}/*/ligands/{pdbid}_A_rec_reduce_noflip.pdb")
+            import glob
+            matching_files = glob.glob(search_pattern)
+            if matching_files:
+                pdb_source = matching_files[0]  # Use the first match
+                shutil.copy2(pdb_source, pdb_dest)
+                print(f"Found and copied PDB file from: {pdb_source} to {pdb_dest}")
+            else:
+                print(f"Error: Could not find PDB file for {pdbid}")
+    except Exception as e:
+        print(f"Warning: Could not copy PDB file: {e}")
+
+
+    # Step 5: Copy SDF files to Vina-box directory
+    # Create vina-box destination directory (already created above)
+    # vina_dest_dir = f"/vol/data/drug-design-pipeline/external/vina-box/docking/{pdbid}/experiment_{experiment}_{epoch}_{num_gen}_{known_binding_site}_{pdbid}"
     # Source SDF path (from EquiBind results)
     source_sdf_path = paths.equibind_results_path(experiment, epoch, num_gen, known_binding_site, pdbid, 'output.sdf')
     
-    print(f"\nCopying SDF files to Vina directory: {vina_dest_dir}")
-    copied_count = copy_top_15_sdf_files(merged_results, source_sdf_path, vina_dest_dir)
-    
+    print(f"\nCopying SDF files to Vina ligands directory: {vina_ligands_dir}")
+    copied_count = copy_top_15_sdf_files(merged_results, source_sdf_path, vina_ligands_dir)
+
     if copied_count > 0:
         print(f"Successfully prepared {copied_count} ligands for Vina docking")
     else:
@@ -201,7 +248,8 @@ if __name__ == '__main__':
     
     print(f"\nProcessing complete!")
     print(f"Results CSV: {output_csv}")
-    print(f"SDF files location: {vina_dest_dir}")
+    print(f"Vina CSV: {vina_csv_dest}")
+    print(f"SDF files location: {vina_ligands_dir}")
     print(f"Total ligands processed: {len(merged_results)}")
 
 
