@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import sys
+import dgl
 
 from copy import deepcopy
 
@@ -129,15 +130,97 @@ def load_rec_and_model(args):
 
     return rec_graph, model
 
+# def run_batch(model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices):
+#     try:
+#         predictions = model(lig_graphs, rec_graphs, geometry_graphs)[0]
+#         out_ligs = ligs
+#         out_lig_coords = lig_coords
+#         names = [lig.GetProp("_Name") for lig in ligs]
+#         successes = list(zip(true_indices, names))
+#         failures = []
+#     except AssertionError:
+#         lig_graphs, rec_graphs, geometry_graphs = (dgl.unbatch(lig_graphs),
+#         dgl.unbatch(rec_graphs), dgl.unbatch(geometry_graphs))
+#         predictions = []
+#         out_ligs = []
+#         out_lig_coords = []
+#         successes = []
+#         failures = []
+#         for lig, lig_coord, lig_graph, rec_graph, geometry_graph, true_index in zip(ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices):
+#             try:
+#                 output = model(lig_graph, rec_graph, geometry_graph)
+#             except AssertionError as e:
+#                 failures.append((true_index, lig.GetProp("_Name")))
+#                 print(f"Failed for {lig.GetProp('_Name')}")
+#             else:
+#                 out_ligs.append(lig)
+#                 out_lig_coords.append(lig_coord)
+#                 predictions.append(output[0][0])
+#                 successes.append((true_index, lig.GetProp("_Name")))
+#     assert len(predictions) == len(out_ligs)
+#     return out_ligs, out_lig_coords, predictions, successes, failures
+
+# Support for confidence score extraction
 def run_batch(model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices):
     try:
-        predictions = model(lig_graphs, rec_graphs, geometry_graphs)[0]
+        # Get model output
+        model_output = model(lig_graphs, rec_graphs, geometry_graphs)
+        
+        # Handle different model output formats
+        if isinstance(model_output, tuple) and len(model_output) >= 6:
+            predictions, ligs_keypts, recs_keypts, rotations, translations, geom_losses = model_output[:6]
+        elif isinstance(model_output, tuple):
+            predictions = model_output[0]
+            ligs_keypts = recs_keypts = rotations = translations = geom_losses = None
+        else:
+            predictions = model_output
+            ligs_keypts = recs_keypts = rotations = translations = geom_losses = None
+        
+        # Calculate confidence scores
+        confidence_scores = []
+        if (ligs_keypts is not None and recs_keypts is not None and 
+            rotations is not None and translations is not None):
+            
+            batch_size = len(predictions)
+            for i in range(batch_size):
+                try:
+                    lig_kpt = ligs_keypts[i]
+                    rec_kpt = recs_keypts[i]
+                    rotation = rotations[i]
+                    translation = translations[i]
+                    
+                    # Ensure tensors are 2D
+                    if len(lig_kpt.shape) == 1:
+                        lig_kpt = lig_kpt.unsqueeze(0)
+                    if len(rec_kpt.shape) == 1:
+                        rec_kpt = rec_kpt.unsqueeze(0)
+                    
+                    # Calculate keypoint alignment loss
+                    transformed_lig = (rotation @ lig_kpt.t()).t() + translation
+                    keypoint_alignment_loss = torch.mean(torch.norm(transformed_lig - rec_kpt, dim=1))
+                    
+                    # Handle geometric loss
+                    geom_loss_val = float(geom_losses) if isinstance(geom_losses, (int, float)) else 0.0
+                    
+                    # Combine losses as confidence indicator (higher = more confident)
+                    confidence = -float(keypoint_alignment_loss.cpu()) - geom_loss_val
+                    confidence_scores.append(confidence)
+                        
+                except Exception as e:
+                    print(f"Warning: Could not calculate confidence for ligand {i}: {e}")
+                    confidence_scores.append(0.0)
+        else:
+            # Fallback: use dummy confidence scores
+            confidence_scores = [0.0] * len(predictions)
+        
         out_ligs = ligs
         out_lig_coords = lig_coords
         names = [lig.GetProp("_Name") for lig in ligs]
-        successes = list(zip(true_indices, names))
+        successes = list(zip(true_indices, names, confidence_scores))
         failures = []
+        
     except AssertionError:
+        # Handle individual processing when batch fails
         lig_graphs, rec_graphs, geometry_graphs = (dgl.unbatch(lig_graphs),
         dgl.unbatch(rec_graphs), dgl.unbatch(geometry_graphs))
         predictions = []
@@ -145,19 +228,52 @@ def run_batch(model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, 
         out_lig_coords = []
         successes = []
         failures = []
-        for lig, lig_coord, lig_graph, rec_graph, geometry_graph, true_index in zip(ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices):
+        confidence_scores = []
+        
+        for lig, lig_coord, lig_graph, rec_graph, geometry_graph, true_index in zip(
+            ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices):
             try:
-                output = model(lig_graph, rec_graph, geometry_graph)
-            except AssertionError as e:
-                failures.append((true_index, lig.GetProp("_Name")))
-                print(f"Failed for {lig.GetProp('_Name')}")
-            else:
+                model_output = model(lig_graph, rec_graph, geometry_graph)
+                
+                if isinstance(model_output, tuple) and len(model_output) >= 6:
+                    pred, lig_kpt, rec_kpt, rotation, translation, geom_loss = model_output[:6]
+                    prediction = pred[0]
+                    
+                    try:
+                        # Calculate confidence for individual ligand
+                        if len(lig_kpt[0].shape) == 1:
+                            lig_kpt_tensor = lig_kpt[0].unsqueeze(0)
+                        else:
+                            lig_kpt_tensor = lig_kpt[0]
+                        
+                        if len(rec_kpt[0].shape) == 1:
+                            rec_kpt_tensor = rec_kpt[0].unsqueeze(0)
+                        else:
+                            rec_kpt_tensor = rec_kpt[0]
+                        
+                        transformed_lig = (rotation[0] @ lig_kpt_tensor.t()).t() + translation[0]
+                        keypoint_alignment_loss = torch.mean(torch.norm(transformed_lig - rec_kpt_tensor, dim=1))
+                        geom_loss_val = float(geom_loss) if isinstance(geom_loss, (int, float, torch.Tensor)) else 0.0
+                        confidence = -float(keypoint_alignment_loss.cpu()) - geom_loss_val
+                    except Exception as e:
+                        print(f"Warning: Could not calculate individual confidence: {e}")
+                        confidence = 0.0
+                else:
+                    prediction = model_output[0][0] if isinstance(model_output, tuple) else model_output[0]
+                    confidence = 0.0
+                
                 out_ligs.append(lig)
                 out_lig_coords.append(lig_coord)
-                predictions.append(output[0][0])
-                successes.append((true_index, lig.GetProp("_Name")))
-    assert len(predictions) == len(out_ligs)
-    return out_ligs, out_lig_coords, predictions, successes, failures
+                predictions.append(prediction)
+                confidence_scores.append(confidence)
+                successes.append((true_index, lig.GetProp("_Name"), confidence))
+                
+            except Exception as e:
+                failures.append((true_index, lig.GetProp("_Name")))
+                print(f"Error processing {lig.GetProp('_Name')}: {e}")
+                
+    assert len(predictions) == len(out_ligs) == len(confidence_scores)
+    return out_ligs, out_lig_coords, predictions, successes, failures, confidence_scores
 
 def run_corrections(lig, lig_coord, ligs_coords_pred_untuned):
     input_coords = lig_coord.detach().cpu()
@@ -198,13 +314,79 @@ def run_corrections(lig, lig_coord, ligs_coords_pred_untuned):
     
     return optimized_mol
 
+# def write_while_inferring(dataloader, model, args):
+    
+#     full_output_path = os.path.join(args.output_directory, "output.sdf")
+#     full_failed_path = os.path.join(args.output_directory, "failed.txt")
+#     full_success_path = os.path.join(args.output_directory, "success.txt")
+
+#     w_or_a = "a" if args.skip_in_output else "w"
+#     with torch.no_grad(), open(full_output_path, w_or_a) as file, open(
+#         full_failed_path, "a") as failed_file, open(full_success_path, w_or_a) as success_file:
+#         with Chem.SDWriter(file) as writer:
+#             i = 0
+#             total_ligs = len(dataloader.dataset)
+#             for batch in dataloader:
+#                 i += args.batch_size
+#                 print(f"Entering batch ending in index {min(i, total_ligs)}/{len(dataloader.dataset)}")
+#                 ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices, failed_in_batch = batch
+#                 for failure in failed_in_batch:
+#                     if failure[1] == "Skipped":
+#                         continue
+#                     failed_file.write(f"{failure[0]} {failure[1]}")
+#                     failed_file.write("\n")
+#                 if ligs is None:
+#                     continue
+#                 lig_graphs = lig_graphs.to(args.device)
+#                 rec_graphs = rec_graphs.to(args.device)
+#                 geometry_graphs = geometry_graphs.to(args.device)
+                
+                
+#                 out_ligs, out_lig_coords, predictions, successes, failures = run_batch(model, ligs, lig_coords,
+#                                                                                        lig_graphs, rec_graphs,
+#                                                                                        geometry_graphs, true_indices)
+                
+#                 # Apply corrections with error handling for SVD convergence issues
+#                 opt_mols = []
+#                 correction_failures = []
+#                 for i, (lig, lig_coord, prediction) in enumerate(zip(out_ligs, out_lig_coords, predictions)):
+#                     try:
+#                         opt_mol = run_corrections(lig, lig_coord, prediction)
+#                         opt_mols.append(opt_mol)
+#                     except np.linalg.LinAlgError as e:
+#                         print(f"Warning: SVD did not converge for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
+#                         # Use the original molecule without corrections
+#                         opt_mols.append(lig)
+#                         correction_failures.append(f"molecule_{i}_svd_failed")
+#                     except Exception as e:
+#                         print(f"Warning: Error in corrections for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
+#                         # Use the original molecule without corrections
+#                         opt_mols.append(lig)
+#                         correction_failures.append(f"molecule_{i}_correction_failed")
+                
+#                 for mol, success in zip(opt_mols, successes):
+#                     writer.write(mol)
+#                     success_file.write(f"{success[0]} {success[1]}")
+#                     success_file.write("\n")
+#                     # print(f"written {mol.GetProp('_Name')} to output")
+#                 for failure in failures:
+#                     failed_file.write(f"{failure[0]} {failure[1]}")
+#                     failed_file.write("\n")
+
+# Support for extraction and writing of confidence scores
 def write_while_inferring(dataloader, model, args):
     
     full_output_path = os.path.join(args.output_directory, "output.sdf")
     full_failed_path = os.path.join(args.output_directory, "failed.txt")
     full_success_path = os.path.join(args.output_directory, "success.txt")
+    confidence_scores_path = os.path.join(args.output_directory, "confidence_scores.csv")
 
     w_or_a = "a" if args.skip_in_output else "w"
+    
+    # Initialize confidence scores CSV
+    import pandas as pd
+    confidence_data = []
+    
     with torch.no_grad(), open(full_output_path, w_or_a) as file, open(
         full_failed_path, "a") as failed_file, open(full_success_path, w_or_a) as success_file:
         with Chem.SDWriter(file) as writer:
@@ -214,6 +396,7 @@ def write_while_inferring(dataloader, model, args):
                 i += args.batch_size
                 print(f"Entering batch ending in index {min(i, total_ligs)}/{len(dataloader.dataset)}")
                 ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices, failed_in_batch = batch
+                
                 for failure in failed_in_batch:
                     if failure[1] == "Skipped":
                         continue
@@ -221,41 +404,64 @@ def write_while_inferring(dataloader, model, args):
                     failed_file.write("\n")
                 if ligs is None:
                     continue
+                    
                 lig_graphs = lig_graphs.to(args.device)
                 rec_graphs = rec_graphs.to(args.device)
                 geometry_graphs = geometry_graphs.to(args.device)
                 
-                
-                out_ligs, out_lig_coords, predictions, successes, failures = run_batch(model, ligs, lig_coords,
-                                                                                       lig_graphs, rec_graphs,
-                                                                                       geometry_graphs, true_indices)
+                out_ligs, out_lig_coords, predictions, successes, failures, confidence_scores = run_batch(
+                    model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, true_indices)
                 
                 # Apply corrections with error handling for SVD convergence issues
                 opt_mols = []
                 correction_failures = []
                 for i, (lig, lig_coord, prediction) in enumerate(zip(out_ligs, out_lig_coords, predictions)):
                     try:
-                        opt_mol = run_corrections(lig, lig_coord, prediction)
+                        if args.run_corrections:
+                            opt_mol = run_corrections(lig, lig_coord, prediction)
+                        else:
+                            opt_mol = lig
                         opt_mols.append(opt_mol)
                     except np.linalg.LinAlgError as e:
                         print(f"Warning: SVD did not converge for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
-                        # Use the original molecule without corrections
                         opt_mols.append(lig)
                         correction_failures.append(f"molecule_{i}_svd_failed")
                     except Exception as e:
                         print(f"Warning: Error in corrections for molecule {lig.GetProp('_Name') if lig.HasProp('_Name') else i}: {e}")
-                        # Use the original molecule without corrections
                         opt_mols.append(lig)
                         correction_failures.append(f"molecule_{i}_correction_failed")
                 
-                for mol, success in zip(opt_mols, successes):
+                # Write molecules and collect confidence data
+                for mol, success, conf_score in zip(opt_mols, successes, confidence_scores):
                     writer.write(mol)
                     success_file.write(f"{success[0]} {success[1]}")
                     success_file.write("\n")
-                    # print(f"written {mol.GetProp('_Name')} to output")
+                    
+                    # Store confidence data
+                    confidence_data.append({
+                        'ligand_index': success[0],
+                        'ligand_name': success[1],
+                        'confidence_score': conf_score,
+                        'status': 'success'
+                    })
+                
                 for failure in failures:
                     failed_file.write(f"{failure[0]} {failure[1]}")
                     failed_file.write("\n")
+                    
+                    # Store failed ligand data
+                    confidence_data.append({
+                        'ligand_index': failure[0],
+                        'ligand_name': failure[1],
+                        'confidence_score': None,
+                        'status': 'failed'
+                    })
+    
+    # Save confidence scores to CSV
+    if confidence_data:
+        df = pd.DataFrame(confidence_data)
+        df.to_csv(confidence_scores_path, index=False)
+        print(f"Confidence scores saved to: {confidence_scores_path}")
 
 def main(arglist = None):
     args, cmdline_args = parse_arguments(arglist)

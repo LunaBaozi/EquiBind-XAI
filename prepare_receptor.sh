@@ -44,7 +44,7 @@ if [ -z "$epoch" ] || [ -z "$num_gen" ] || [ -z "$known_binding_site" ] || [ -z 
 fi
 
 src="data/${pdbid}/${pdbid}_A_rec.pdb"
-ligands_dir="../../results/experiment_${experiment}_${epoch}_${num_gen}_${known_binding_site}_${pdbid}/ligands"
+ligands_dir="data/${pdbid}/experiment_${experiment}_${epoch}_${num_gen}_${known_binding_site}_${pdbid}/ligands"
 dst="${ligands_dir}/${pdbid}_A_rec.pdb"
 output_file="${ligands_dir}/${pdbid}_A_rec_reduce_noflip.pdb"
 
