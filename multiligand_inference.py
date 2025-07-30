@@ -215,7 +215,16 @@ def run_batch(model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, 
         
         out_ligs = ligs
         out_lig_coords = lig_coords
-        names = [lig.GetProp("_Name") for lig in ligs]
+        names = []
+        for i, lig in enumerate(ligs):
+            # Try to get the ligand name, fallback to index-based naming
+            if lig.HasProp("_Name") and lig.GetProp("_Name").strip():
+                name = lig.GetProp("_Name")
+            else:
+                # Use the true_indices for consistent naming
+                name = f"{true_indices[i]}"
+            names.append(name)
+        
         successes = list(zip(true_indices, names, confidence_scores))
         failures = []
         
@@ -266,11 +275,24 @@ def run_batch(model, ligs, lig_coords, lig_graphs, rec_graphs, geometry_graphs, 
                 out_lig_coords.append(lig_coord)
                 predictions.append(prediction)
                 confidence_scores.append(confidence)
-                successes.append((true_index, lig.GetProp("_Name"), confidence))
+                
+                # Try to get the ligand name, fallback to index-based naming
+                if lig.HasProp("_Name") and lig.GetProp("_Name").strip():
+                    name = lig.GetProp("_Name")
+                else:
+                    name = f"{true_index}"
+                    
+                successes.append((true_index, name, confidence))
                 
             except Exception as e:
-                failures.append((true_index, lig.GetProp("_Name")))
-                print(f"Error processing {lig.GetProp('_Name')}: {e}")
+                # Try to get the ligand name, fallback to index-based naming
+                if lig.HasProp("_Name") and lig.GetProp("_Name").strip():
+                    name = lig.GetProp("_Name")
+                else:
+                    name = f"{true_index}"
+                    
+                failures.append((true_index, name))
+                print(f"Error processing {name}: {e}")
                 
     assert len(predictions) == len(out_ligs) == len(confidence_scores)
     return out_ligs, out_lig_coords, predictions, successes, failures, confidence_scores
@@ -438,9 +460,15 @@ def write_while_inferring(dataloader, model, args):
                     success_file.write("\n")
                     
                     # Store confidence data
+                    ligand_name = success[1]
+                    # Ensure .sdf extension
+                    if not ligand_name.lower().endswith('.sdf'):
+                        filename = f"{ligand_name}.sdf"
+                    else:
+                        filename = ligand_name
+                    
                     confidence_data.append({
-                        'ligand_index': success[0],
-                        'ligand_name': success[1],
+                        'filename': filename,
                         'confidence_score': conf_score,
                         'status': 'success'
                     })
@@ -450,9 +478,15 @@ def write_while_inferring(dataloader, model, args):
                     failed_file.write("\n")
                     
                     # Store failed ligand data
+                    ligand_name = failure[1]
+                    # Ensure .sdf extension
+                    if not ligand_name.lower().endswith('.sdf'):
+                        filename = f"{ligand_name}.sdf"
+                    else:
+                        filename = ligand_name
+                    
                     confidence_data.append({
-                        'ligand_index': failure[0],
-                        'ligand_name': failure[1],
+                        'filename': filename,
                         'confidence_score': None,
                         'status': 'failed'
                     })

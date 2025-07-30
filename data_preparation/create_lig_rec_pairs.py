@@ -11,13 +11,23 @@ import shutil
 def merge_sdf_files(input_files, output_file):
     writer = Chem.SDWriter(str(output_file))
     for file in input_files:
-        if not  os.path.exists(str(file)):
+        if not os.path.exists(str(file)):
             print(f"Warning: File {file} does not exist. Skipping...")
             continue
+        
+        # Get the filename without extension to use as the ligand name
+        file_stem = Path(file).name  #stem  # e.g., "3" from "3.sdf"
+        
         supp = Chem.SDMolSupplier(str(file))
         for mol in supp:
             if mol is not None:
+                # Set the _Name property to the filename (without .sdf extension)
+                mol.SetProp("_Name", file_stem)
                 writer.write(mol)
+            else:
+                print(f"Warning: Could not parse molecule from {file}")
+                
+    print(f"Processed {len([f for f in input_files if os.path.exists(str(f))])} files")
     writer.close()
 
 
