@@ -92,7 +92,8 @@ def lig_atom_featurizer(mol):
         g_charge = atom.GetDoubleProp('_GasteigerCharge')
         atom_features_list.append([
             safe_index(allowable_features['possible_atomic_num_list'], atom.GetAtomicNum()),
-            allowable_features['possible_chirality_list'].index(str(atom.GetChiralTag())),
+            # allowable_features['possible_chirality_list'].index(str(atom.GetChiralTag())),
+            safe_index(allowable_features['possible_chirality_list'], str(atom.GetChiralTag())),
             safe_index(allowable_features['possible_degree_list'], atom.GetTotalDegree()),
             safe_index(allowable_features['possible_formal_charge_list'], atom.GetFormalCharge()),
             safe_index(allowable_features['possible_implicit_valence_list'], atom.GetImplicitValence()),
